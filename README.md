@@ -41,6 +41,7 @@ We are currently in the **data sourcing and planning** phase. Tasks include:
 - Rori
 - Amanda
 - Jamie
+- Yonghan
 
 ---
 
