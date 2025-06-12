@@ -55,4 +55,5 @@ Thumbs.db
 yfinance-cache/
 
 # Logs
-*.log
+*.lognotebooks/esg-financial-assistant/
+notebooks/esg-financial-assistant/
