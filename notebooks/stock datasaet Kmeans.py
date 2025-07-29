@@ -3,85 +3,35 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 import numpy as np
-from sklearn.metrics import silhouette_score
-import warnings
-warnings.filterwarnings("ignore", message="X does not have valid feature names, but StandardScaler was fitted with feature names")
 
-# Load
+# Load data
 cluster_data = pd.read_csv("cleaned_esg_stock_data.csv")
 print(f"Dataset loaded: {len(cluster_data)} companies")
 
-# K-Means Clustering on Beta and return
-print("\n=== K-Means Clustering on Beta and 1yr_Performance ===")
-
-# Select features
-risk_return_features = cluster_data[["Beta", "1yr_Performance"]].copy()
+# K-Means clustering with k=5
+features = ["Beta", "1yr_Performance"]
 scaler_rr = StandardScaler()
-risk_return_scaled = scaler_rr.fit_transform(risk_return_features)
+filtered = cluster_data.copy()
+scaled = scaler_rr.fit_transform(filtered[features])
+k_final = 5
+kmeans_final = KMeans(n_clusters=k_final, random_state=42, n_init='auto')
+labels_final = kmeans_final.fit_predict(scaled)
+final_cluster_col = f'final_cluster_{k_final}'
+filtered[final_cluster_col] = labels_final
+final_k = k_final
 
-# Elbow method and silhouette scores
-inertias_rr = []
-silhouette_scores = []
-k_range = range(2, 8)
-for k in k_range:
-    kmeans_rr = KMeans(n_clusters=k, random_state=42, n_init='auto')
-    labels_rr = kmeans_rr.fit_predict(risk_return_scaled)
-    inertias_rr.append(kmeans_rr.inertia_)
-    silhouette_scores.append(silhouette_score(risk_return_scaled, labels_rr))
-
-# Plot Elbow Method
-plt.figure(figsize=(10,4))
-plt.subplot(1,2,1)
-plt.plot(list(k_range), inertias_rr, marker='o')
-plt.title('Elbow Method for K (Beta & 1yr_Performance)')
-plt.xlabel('Number of clusters (K)')
-plt.ylabel('Inertia')
-plt.grid(True, alpha=0.3)
-
-# Plot Silhouette Scores
-plt.subplot(1,2,2)
-plt.plot(list(k_range), silhouette_scores, marker='o', color='orange')
-plt.title('Silhouette Score for K (Beta & 1yr_Performance)')
-plt.xlabel('Number of clusters (K)')
-plt.ylabel('Silhouette Score')
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-plt.show()
-
-# use k=5 for clustering
-k_rr = 5
-print(f"\n{'='*30}\nUsing {k_rr} clusters for risk-return analysis\n{'='*30}")
-kmeans_rr = KMeans(n_clusters=k_rr, random_state=42, n_init='auto')
-labels_rr = kmeans_rr.fit_predict(risk_return_scaled)
-cluster_data[f'risk_return_cluster_{k_rr}'] = labels_rr
-
-# Remove outlier clusters 
-cluster_counts = cluster_data[f'risk_return_cluster_{k_rr}'].value_counts()
-outlier_clusters = cluster_counts[cluster_counts < 3].index.tolist()
-if outlier_clusters:
-    print(f"Removing outlier clusters: {outlier_clusters} (less than 3 members)")
-    filtered = cluster_data[~cluster_data[f'risk_return_cluster_{k_rr}'].isin(outlier_clusters)].reset_index(drop=True)
-    risk_return_features_f = filtered[["Beta", "1yr_Performance"]].copy()
-    risk_return_scaled_f = scaler_rr.fit_transform(risk_return_features_f)
-    kmeans_rr = KMeans(n_clusters=k_rr, random_state=42, n_init='auto')
-    labels_rr = kmeans_rr.fit_predict(risk_return_scaled_f)
-    filtered[f'risk_return_cluster_{k_rr}'] = labels_rr
-else:
-    filtered = cluster_data.copy()
-
-# visualization
+# Visualization
 plt.figure(figsize=(10,7))
 sns.scatterplot(
     x=filtered['Beta'],
     y=filtered['1yr_Performance'],
-    hue=filtered[f'risk_return_cluster_{k_rr}'],
+    hue=filtered[final_cluster_col],
     palette='Set2',
     alpha=0.7,
     s=60
 )
-plt.title(f'K-Means Clusters (k={k_rr}): Risk (Beta) vs Return (1yr_Performance)', fontsize=15)
+plt.title(f'K-Means Clustering (k={final_k}): Risk vs Return (Cleaned Data)', fontsize=15)
 plt.xlabel('Beta (Risk)', fontsize=12)
 plt.ylabel('1-Year Performance (Return)', fontsize=12)
 plt.legend(title='Cluster', fontsize=10)
@@ -89,10 +39,10 @@ plt.grid(True, alpha=0.3)
 plt.show()
 
 # Cluster explanation
-print(f"\nCLUSTER FEATURE EXPLANATION (k={k_rr}):")
+print(f"\nCLUSTER FEATURE EXPLANATION (k={final_k}):")
 summary_rows = []
-for cluster_id in sorted(pd.unique(filtered[f'risk_return_cluster_{k_rr}'])):
-    cluster_companies = filtered[filtered[f'risk_return_cluster_{k_rr}'] == cluster_id]
+for cluster_id in sorted(pd.unique(filtered[final_cluster_col])):
+    cluster_companies = filtered[filtered[final_cluster_col] == cluster_id]
     print(f"\nCluster {cluster_id} ({len(cluster_companies)} companies):")
     for feature in ["Beta", "1yr_Performance"]:
         mean = cluster_companies[feature].mean()
@@ -121,28 +71,32 @@ for cluster_id in sorted(pd.unique(filtered[f'risk_return_cluster_{k_rr}'])):
     else:
         return_level = 'Weak Return'
     summary_rows.append({
-        'K': k_rr,
+        'K': final_k,
         'Cluster': cluster_id,
         'N': len(cluster_companies),
         'Risk': risk_level,
         'Return': return_level
     })
 # Print summary
-print(f"\nSummary Table for K={k_rr}:")
+print(f"\nSummary Table for K={final_k}:")
 print(f"{'K':<3} {'Cluster':<7} {'N':<5} {'Risk':<18} {'Return':<20}")
 for row in summary_rows:
     print(f"{row['K']:<3} {row['Cluster']:<7} {row['N']:<5} {row['Risk']:<18} {row['Return']:<20}")
 
 # Save
 output_filename = "clustered_esg_stock_data.csv"
-cluster_data.to_csv(output_filename, index=False)
+filtered.to_csv(output_filename, index=False)
 print(f"\nClustered dataset saved as: {output_filename}")
 
-def recommendation(user_beta, user_performance, e_weight, s_weight, g_weight):
+def recommendation(user_beta, user_performance, e_weight, s_weight, g_weight, num_recommendations=10):
     """
-    Assign user to a cluster and recommend stocks sorted by ESG fields in order of user weight (descending).
-    If two or more weights are equal and the highest, only the first highest field is used for sorting.
-    If all three weights are equal, sort by 'environment_score' only.
+    Parameters:
+    user_beta: User's risk tolerance (-4 - 4)
+    user_performance: User's expected return (-2 - 8)
+    e_weight: Weight for environment_score (0 - 1)
+    s_weight: Weight for social_score (0 - 1)
+    g_weight: Weight for governance_score (0 - 1)
+    num_recommendations: Number of stocks to recommend (default: 15)
     """
     
     weight_dict = {
@@ -164,21 +118,21 @@ def recommendation(user_beta, user_performance, e_weight, s_weight, g_weight):
             sorted_fields = [max_fields[0]]
     else:
         print(f"Automatic sorting order: {sorted_fields}")
-    # tandardize 
+    # Standardize 
     user_features = scaler_rr.transform([[user_beta, user_performance]])
     # Predict
-    user_cluster = kmeans_rr.predict(user_features)[0]
+    user_cluster = kmeans_final.predict(user_features)[0]
     print(f"User assigned to cluster {user_cluster}")
-    user_cluster_stocks = filtered[filtered[f'risk_return_cluster_{k_rr}'] == user_cluster].copy()
+    user_cluster_stocks = filtered[filtered[final_cluster_col] == user_cluster].copy()
     # Sort 
     user_cluster_stocks = user_cluster_stocks.sort_values(by=sorted_fields, ascending=[False]*len(sorted_fields))
     # Recommend
-    top_recommend = user_cluster_stocks.head(10)
-    print("Top 10 recommended stocks:")
+    top_recommend = user_cluster_stocks.head(num_recommendations)
+    print(f"Top {num_recommendations} recommended stocks:")
     print(top_recommend[['ticker', 'name', 'Beta', '1yr_Performance', 'environment_score', 'social_score', 'governance_score']])
     # save
     top_recommend.to_csv('user_recommended_stocks.csv', index=False)
-    print("Top 10 recommended stocks have been saved to 'user_recommended_stocks.csv'.")
+    print(f"Top {num_recommendations} recommended stocks have been saved to 'user_recommended_stocks.csv'.")
     return top_recommend
 
 if __name__ == "__main__":
@@ -187,4 +141,5 @@ if __name__ == "__main__":
     e_weight = 0.3
     s_weight = 0.5
     g_weight = 0.2
-    recommendation(user_beta, user_performance, e_weight, s_weight, g_weight)
+    num_recommendations = 15  # Customizable number of recommendations
+    recommendation(user_beta, user_performance, e_weight, s_weight, g_weight, num_recommendations)
